@@ -41,7 +41,7 @@ class Tensor:
             self.grad += (out.data > 0) * out.grad
         out._backward = _backward
         return out
-    
+
     def backward(self):
         queue = [self]
         self.grad = 1.0
