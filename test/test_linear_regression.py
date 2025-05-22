@@ -1,4 +1,4 @@
-from tensor import Tensor
+from micrograd.tensor import Tensor
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ def model(x):
     return x * w + b
 
 # 生成线性回归数据集
-def generate_dataset(n_samples=100, true_w=3.5, true_b=2.0, noise=0.5, x_range=(-10, 10)):
+def generate_dataset(n_samples=100, true_w=3.5, true_b=2.0, noise=5, x_range=(-10, 10)):
     """
     生成线性回归数据集
     
@@ -95,7 +95,7 @@ def plot_loss(losses):
     plt.close()
 
 # 生成数据集
-true_w, true_b = 3.5, 2.0
+true_w, true_b = 5.5, 2.0
 xs, ys = generate_dataset(true_w=true_w, true_b=true_b)
 
 # 打印数据集信息
@@ -107,7 +107,7 @@ print(f"初始参数: w={w.data:.4f}, b={b.data:.4f}")
 plot_dataset(xs, ys)
 
 # 训练模型
-losses = train_model(xs, ys, epochs=100, learning_rate=0.001)
+losses = train_model(xs, ys, epochs=100, learning_rate=0.01)
 
 # 评估模型
 pred_ys = [model(Tensor(x)).data for x in xs]
