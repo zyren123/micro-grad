@@ -1,4 +1,4 @@
-from tensor import Tensor
+from micrograd.tensor import Tensor
 import random
 import numpy as np
 import matplotlib.pyplot as plt
