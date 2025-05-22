@@ -1,6 +1,10 @@
+import sys
+import os
+# 添加项目根目录到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from micrograd.tensor import Tensor
 import random
-import numpy as np
 import matplotlib.pyplot as plt
 
 # 模型参数初始化
@@ -11,7 +15,7 @@ def model(x):
     return x * w + b
 
 # 生成线性回归数据集
-def generate_dataset(n_samples=100, true_w=3.5, true_b=2.0, noise=0.5, x_range=(-10, 10)):
+def generate_dataset(n_samples=100, true_w=3.5, true_b=3.0, noise=3, x_range=(-10, 10)):
     """
     生成线性回归数据集
     
@@ -44,7 +48,7 @@ def mse_loss(y_pred, y_true):
         loss += (y_p - y_t) ** 2
     return loss / len(y_pred)
 
-def train_model(xs, ys, epochs=100, learning_rate=0.01):
+def train_model(xs, ys, epochs=300, learning_rate=0.01):
     losses = []
     
     for epoch in range(epochs):

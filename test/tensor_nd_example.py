@@ -1,4 +1,8 @@
 import numpy as np
+import sys
+import os
+# 添加项目根目录到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import matplotlib.pyplot as plt
 from micrograd.tensor_nd import TensorND
 import torch  # 导入PyTorch进行对比
