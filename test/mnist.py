@@ -1,2 +1,5 @@
 from micrograd.module import MLP
-model = MLP(2, [100, 10])
+model = MLP(784, [784, 784,10])
+
+
+

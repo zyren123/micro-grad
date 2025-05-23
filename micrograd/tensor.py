@@ -1,3 +1,6 @@
+import math
+
+
 class Tensor:
     def __init__(self, data, _children=(), _op=''):
         self.data = data
@@ -42,6 +45,13 @@ class Tensor:
         out._backward = _backward
         return out
 
+    def exp(self) -> "Tensor":
+        out = Tensor(math.exp(self.data), _children=(self,), _op='exp')
+        def _backward():
+            self.grad += out.data * out.grad
+        out._backward = _backward
+        return out
+
     def backward(self):
         queue = [self]
         self.grad = 1.0
@@ -75,3 +85,25 @@ class Tensor:
 
     def __repr__(self):
         return f"Tensor(data={self.data}, grad={self.grad})"
+    
+    @staticmethod
+    def softmax(tensors) -> list["Tensor"]:
+        max_val = max(t.data for t in tensors)
+        shifted_tensors = [t - max_val for t in tensors]
+        exps = [t.exp() for t in shifted_tensors]
+        sum_exp = sum(exps)
+        
+        probs = []
+        for exp_t in exps:
+            out = exp_t / sum_exp
+            probs.append(out)
+        for i, prob in enumerate(probs):
+            def _backward(idx=i):
+                for j, tensor in enumerate(tensors):
+                    if j == idx:  # 对角项
+                        tensor.grad += prob.data * (1 - prob.data) * prob.grad
+                    else:  # 非对角项
+                        tensor.grad += -probs[j].data * prob.data * prob.grad
+            prob._backward = _backward
+        
+        return probs
