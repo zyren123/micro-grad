@@ -15,7 +15,9 @@ class GradientFunction:
 
 class Tensor:
     def __init__(self,data):
-        self.data = data if isinstance(data, np.ndarray) else np.array(data)
+        if not isinstance(data, np.ndarray):
+            data=np.array(data)
+        self.data = data
         self.shape = data.shape
         self.grad_fn = None
         self.grad = None
@@ -89,8 +91,15 @@ class Tensor:
     def __pow__(self, other):
         assert isinstance(other, (int, float)), "幂运算只支持整数或浮点数"
         def _POW_backward(grad):
-            return self._handle_broadcast_grad(grad * other * self.data ** (other - 1), self.shape), None
-        out=Tensor(self.data ** other)
+            # 确保在梯度计算中也使用浮点数据
+            float_data = self.data.astype(float)
+            # 计算 other * data^(other-1) 作为梯度
+            power_grad = grad * other * (float_data ** (other - 1))
+            return self._handle_broadcast_grad(power_grad, self.shape), None
+        
+        # 确保数据为浮点型，避免整数负次幂错误
+        data = self.data.astype(float)
+        out=Tensor(data ** other)
         out.grad_fn = GradientFunction(_POW_backward)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
@@ -161,6 +170,13 @@ class Tensor:
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
 
+    def log(self):
+        def _LOG_backward(grad):
+            return self._handle_broadcast_grad(grad / self.data, self.shape)
+        out=Tensor(np.log(self.data))
+        out.grad_fn = GradientFunction(_LOG_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
 
     def softmax(self, dim=-1):
         """计算softmax
