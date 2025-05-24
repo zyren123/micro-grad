@@ -1,8 +1,5 @@
-from tensor import Tensor
-from torch.nn import Linear as TorchLinear
-from torch import tensor as TorchTensor
-import torch
-from loss import cross_entropy
+from .tensor import Tensor
+from .loss import cross_entropy
 import numpy as np
 
 class Module:

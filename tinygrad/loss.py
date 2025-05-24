@@ -1,5 +1,5 @@
 import numpy as np
-from tensor import Tensor
+from .tensor import Tensor
 
 def cross_entropy(y_pred: Tensor, y_true: Tensor) -> Tensor:
     """计算交叉熵损失
