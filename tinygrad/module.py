@@ -79,7 +79,43 @@ class MLP(Module):
     
     def __repr__(self):
         return f"MLP(layers={self.layers})"
+
+class Sequential(Module):
+    def __init__(self, *layers):
+        super().__init__()
+        self.layers = layers
+        self.params.extend(layer.params for layer in layers)
         
+    def forward(self, x:Tensor) -> Tensor:
+        for layer in self.layers:
+            x = layer(x)
+        return x
+    
+    def __repr__(self):
+        return f"Sequential(layers={self.layers})"
+
+class Attention(Module):
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.q = Linear(d_model, d_model)
+        self.k = Linear(d_model, d_model)
+        self.v = Linear(d_model, d_model)
+        self.o = Linear(d_model, d_model)
+        
+    def forward(self, x:Tensor) -> Tensor:
+        q = self.q(x)
+        k = self.k(x)
+        v = self.v(x)
+        q = q.reshape(q.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
+        k = k.reshape(k.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
+        v = v.reshape(v.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
+        
+        attn_scores = q @ k.transpose(-2, -1)
+        attn_scores = attn_scores / np.sqrt(self.d_model // self.n_heads)
+        
+
 if __name__ == "__main__":
     try:
         print("创建模型...")
