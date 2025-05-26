@@ -154,18 +154,38 @@ class Tensor:
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
-    def sum(self):
+    def sum(self, axis=None, keepdims=False):
+        """沿指定轴求和"""
         def _SUM_backward(grad):
-            return np.ones_like(self.data) * grad
-        out=Tensor(np.sum(self.data))
+            if axis is None:
+                return np.ones_like(self.data) * grad
+            else:
+                # 需要将梯度广播回原始形状
+                grad_expanded = np.expand_dims(grad, axis) if not keepdims else grad
+                return np.broadcast_to(grad_expanded, self.data.shape)
+        
+        out = Tensor(np.sum(self.data, axis=axis, keepdims=keepdims))
         out.grad_fn = GradientFunction(_SUM_backward)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
-    def mean(self):
+    def mean(self, axis=None, keepdims=False):
+        """沿指定轴求平均值"""
         def _MEAN_backward(grad):
-            return np.ones_like(self.data) * grad / self.data.size
-        out=Tensor(np.mean(self.data))
+            if axis is None:
+                size = self.data.size
+                return np.ones_like(self.data) * grad / size
+            else:
+                # 计算指定轴的大小
+                if isinstance(axis, int):
+                    size = self.data.shape[axis]
+                else:
+                    size = np.prod([self.data.shape[ax] for ax in axis])
+                
+                grad_expanded = np.expand_dims(grad, axis) if not keepdims else grad
+                return np.broadcast_to(grad_expanded, self.data.shape) / size
+        
+        out = Tensor(np.mean(self.data, axis=axis, keepdims=keepdims))
         out.grad_fn = GradientFunction(_MEAN_backward)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
@@ -211,13 +231,120 @@ class Tensor:
         out.grad_fn = GradientFunction(_SOFTMAX_backward)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
-    
-    
-    def transpose(self):
-        self.data = self.data.T
-        self.shape = self.data.shape
-        return self
-    
+
+    def max(self, axis=None, keepdims=False):
+        """沿指定轴求最大值"""
+        def _MAX_backward(grad):
+            if axis is None:
+                # 全局最大值
+                max_mask = (self.data == np.max(self.data)).astype(float)
+                return max_mask * grad / np.sum(max_mask)
+            else:
+                # 沿指定轴的最大值
+                max_vals = np.max(self.data, axis=axis, keepdims=True)
+                max_mask = (self.data == max_vals).astype(float)
+                
+                grad_expanded = np.expand_dims(grad, axis) if not keepdims else grad
+                grad_broadcasted = np.broadcast_to(grad_expanded, self.data.shape)
+                
+                # 处理多个相同最大值的情况
+                count_mask = np.sum(max_mask, axis=axis, keepdims=True)
+                return max_mask * grad_broadcasted / count_mask
+        
+        out = Tensor(np.max(self.data, axis=axis, keepdims=keepdims))
+        out.grad_fn = GradientFunction(_MAX_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def pad(self, pad_width, mode='constant', constant_values=0):
+        """填充张量"""
+        def _PAD_backward(grad):
+            # 移除填充，恢复原始形状
+            slices = []
+            for i, (pad_before, pad_after) in enumerate(pad_width):
+                start = pad_before
+                end = grad.shape[i] - pad_after if pad_after > 0 else grad.shape[i]
+                slices.append(slice(start, end))
+            return grad[tuple(slices)]
+        
+        out = Tensor(np.pad(self.data, pad_width, mode=mode, constant_values=constant_values))
+        out.grad_fn = GradientFunction(_PAD_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def flatten(self, start_dim=1):
+        """展平张量"""
+        original_shape = self.shape
+        
+        # 计算新的形状
+        if start_dim == 0:
+            new_shape = (-1,)
+        else:
+            batch_dims = original_shape[:start_dim]
+            flatten_size = np.prod(original_shape[start_dim:])
+            new_shape = batch_dims + (flatten_size,)
+        
+        output = self.data.reshape(new_shape)
+        out = Tensor(output)
+        
+        def _FLATTEN_backward(grad):
+            return grad.reshape(original_shape)
+        
+        out.grad_fn = GradientFunction(_FLATTEN_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def reshape(self, shape):
+        """重塑张量形状"""
+        original_shape = self.shape
+        output = self.data.reshape(shape)
+        out = Tensor(output)
+        
+        def _RESHAPE_backward(grad):
+            return grad.reshape(original_shape)
+        
+        out.grad_fn = GradientFunction(_RESHAPE_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def transpose(self, axes=None):
+        """转置张量"""
+        original_shape = self.shape
+        
+        if axes is None:
+            # 默认转置（交换最后两个维度）
+            if len(self.shape) < 2:
+                axes = list(range(len(self.shape)))
+            else:
+                axes = list(range(len(self.shape)))
+                axes[-2], axes[-1] = axes[-1], axes[-2]
+        
+        output = np.transpose(self.data, axes)
+        out = Tensor(output)
+        
+        def _TRANSPOSE_backward(grad):
+            # 反向转置
+            inverse_axes = [0] * len(axes)
+            for i, ax in enumerate(axes):
+                inverse_axes[ax] = i
+            return np.transpose(grad, inverse_axes)
+        
+        out.grad_fn = GradientFunction(_TRANSPOSE_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def __getitem__(self, key):
+        """支持索引和切片操作"""
+        def _GETITEM_backward(grad):
+            result = np.zeros_like(self.data)
+            result[key] = grad
+            return result
+        
+        out = Tensor(self.data[key])
+        out.grad_fn = GradientFunction(_GETITEM_backward)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
     @classmethod
     def randn(cls, shape):
         return cls(np.random.randn(*shape))
