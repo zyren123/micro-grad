@@ -23,6 +23,9 @@ class Tensor:
         self.grad_fn = None
         self.grad = None
     
+    def __getitem__(self, key):
+        return Tensor(self.data[key])
+    
     def _accumulate_grad(self, grad):
         if self.grad is None:
             self.grad = grad
@@ -107,7 +110,20 @@ class Tensor:
 
     def __matmul__(self, other):
         def _MATMUL_backward(grad):
-            return grad @ other.data.T, self.data.T @ grad
+            # 处理高维张量的矩阵乘法反向传播
+            # 对于 C = A @ B，有：
+            # dA = grad @ B.T (在最后两个维度上)
+            # dB = A.T @ grad (在最后两个维度上)
+            
+            # 使用swapaxes来交换最后两个维度，相当于转置
+            other_T = np.swapaxes(other.data, -2, -1)
+            self_T = np.swapaxes(self.data, -2, -1)
+            
+            grad_self = grad @ other_T
+            grad_other = self_T @ grad
+            
+            return grad_self, grad_other
+            
         out=Tensor(self.data @ other.data)
         out.grad_fn = GradientFunction(_MATMUL_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
@@ -214,10 +230,54 @@ class Tensor:
         return out
     
     
-    def transpose(self):
-        self.data = self.data.T
-        self.shape = self.data.shape
-        return self
+    def transpose(self,*axes):
+        ndim = len(self.data.shape)
+        
+        if len(axes) == 0:
+            # 没有指定轴，默认反转所有轴
+            axes = tuple(range(ndim-1, -1, -1))
+        elif len(axes) == 2:
+            # 只指定了两个轴，需要构造完整的轴顺序
+            axis1, axis2 = axes
+            # 处理负索引
+            if axis1 < 0:
+                axis1 = ndim + axis1
+            if axis2 < 0:
+                axis2 = ndim + axis2
+            
+            # 构造完整的轴顺序，只交换指定的两个轴
+            full_axes = list(range(ndim))
+            full_axes[axis1], full_axes[axis2] = full_axes[axis2], full_axes[axis1]
+            axes = tuple(full_axes)
+        else:
+            # 指定了完整的轴顺序，处理负索引
+            normalized_axes = []
+            for axis in axes:
+                if axis < 0:
+                    normalized_axes.append(ndim + axis)
+                else:
+                    normalized_axes.append(axis)
+            axes = tuple(normalized_axes)
+        
+        out=Tensor(self.data.transpose(*axes))
+        def _TRANSPOSE_backward(grad):
+            # 反向传播时需要使用逆转置
+            # 创建逆转置的轴顺序
+            inverse_axes = [0] * len(axes)
+            for i, axis in enumerate(axes):
+                inverse_axes[axis] = i
+            return grad.transpose(*inverse_axes)
+        out.grad_fn = GradientFunction(_TRANSPOSE_backward,out)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+    
+    def reshape(self, *shape):
+        out=Tensor(self.data.reshape(*shape))
+        def _RESHAPE_backward(grad):
+            return grad.reshape(self.data.shape)
+        out.grad_fn = GradientFunction(_RESHAPE_backward,out)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
     
     @classmethod
     def randn(cls, shape):

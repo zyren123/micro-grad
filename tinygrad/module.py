@@ -13,10 +13,10 @@ class Module:
         for p in self.params:
             p.grad = 0
             
-    def __call__(self, x: Tensor) -> Tensor:
-        return self.forward(x)
+    def __call__(self, x: Tensor,**kwargs) -> Tensor:
+        return self.forward(x,**kwargs)
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor,**kwargs) -> Tensor:
         raise NotImplementedError
     
     def total_params(self):
@@ -104,20 +104,53 @@ class Attention(Module):
         self.v = Linear(d_model, d_model)
         self.o = Linear(d_model, d_model)
         
-    def forward(self, x:Tensor) -> Tensor:
+    def forward(self, x:Tensor, is_causal=False) -> Tensor:
         q = self.q(x)
         k = self.k(x)
         v = self.v(x)
-        q = q.reshape(q.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
-        k = k.reshape(k.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
-        v = v.reshape(v.shape[0], self.n_heads, -1, self.d_model // self.n_heads)
+        
+        q = q.reshape(q.shape[0], q.shape[1], self.n_heads, self.d_model // self.n_heads)
+        k = k.reshape(k.shape[0], k.shape[1], self.n_heads, self.d_model // self.n_heads)
+        v = v.reshape(v.shape[0], v.shape[1], self.n_heads, self.d_model // self.n_heads)
+        
+        # 转置以便进行多头注意力计算: (batch, n_heads, seq_len, head_dim)
+        q = q.transpose(1,2)
+        k = k.transpose(1,2)
+        v = v.transpose(1,2)
         
         attn_scores = q @ k.transpose(-2, -1)
-        attn_scores = attn_scores / np.sqrt(self.d_model // self.n_heads)
         
+        if is_causal:
+            # 创建因果mask：下三角为0，上三角为-inf
+            seq_len = attn_scores.shape[-1]
+            mask = np.triu(np.full((seq_len, seq_len), -np.inf), k=1)  # 上三角设为-inf
+            attn_scores = attn_scores + mask
+        attn_scores = attn_scores / np.sqrt(self.d_model // self.n_heads)
+        attn_weights = attn_scores.softmax()
+        
+        out = attn_weights @ v
+        
+        # 转置回原来的形状并reshape
+        out = out.transpose(0, 2, 1, 3)
+        out = out.reshape(out.shape[0], out.shape[1], self.d_model)
+        
+        return self.o(out)
 
+def test_attention():
+    x=Tensor.randn((1,10,12))
+    print(f"输入 x 的形状: {x.shape}")
+    attn=Attention(12,4)
+    attn_weights=attn(x,is_causal=True)
+    attn_weights.backward()
+    print(attn.q.w.grad)
+    print(attn.k.w.grad)
+    print(attn.v.w.grad)
+    print(attn.o.w.grad)
+    print(x.grad)
+    
 if __name__ == "__main__":
     try:
+        test_attention()
         print("创建模型...")
         model = MLP(784, [1024, 10])
         
