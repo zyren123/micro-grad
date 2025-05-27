@@ -35,7 +35,7 @@ class Tensor:
         return self.grad_fn
     
     def __repr__(self):
-        return f"Tensor(data={self.data}, grad={self.grad})"
+        return f"Tensor(data={self.data}, grad={self.grad}, grad_fn={self.get_grad_fn()})"
 
     def _handle_broadcast_grad(self, grad, shape):
         """处理广播情况下的梯度计算
