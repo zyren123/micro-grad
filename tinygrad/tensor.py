@@ -230,44 +230,28 @@ class Tensor:
         return out
     
     
-    def transpose(self,*axes):
+    def transpose(self, axis1, axis2):
+        """张量转置操作
+        
+        Args:
+            *axes: 轴的顺序
+                - 如果没有参数：反转所有轴 (等价于 .T)
+                - 如果有2个参数：交换指定的两个轴
+                - 如果有完整的轴序列：按指定顺序重排轴
+        """
         ndim = len(self.data.shape)
         
-        if len(axes) == 0:
-            # 没有指定轴，默认反转所有轴
-            axes = tuple(range(ndim-1, -1, -1))
-        elif len(axes) == 2:
-            # 只指定了两个轴，需要构造完整的轴顺序
-            axis1, axis2 = axes
-            # 处理负索引
-            if axis1 < 0:
-                axis1 = ndim + axis1
-            if axis2 < 0:
-                axis2 = ndim + axis2
-            
-            # 构造完整的轴顺序，只交换指定的两个轴
-            full_axes = list(range(ndim))
-            full_axes[axis1], full_axes[axis2] = full_axes[axis2], full_axes[axis1]
-            axes = tuple(full_axes)
-        else:
-            # 指定了完整的轴顺序，处理负索引
-            normalized_axes = []
-            for axis in axes:
-                if axis < 0:
-                    normalized_axes.append(ndim + axis)
-                else:
-                    normalized_axes.append(axis)
-            axes = tuple(normalized_axes)
-        
-        out=Tensor(self.data.transpose(*axes))
+        # 处理负索引
+        if axis1 < 0:
+            axis1 = ndim + axis1
+        if axis2 < 0:
+            axis2 = ndim + axis2
+                
+        out = Tensor(np.swapaxes(self.data, axis1, axis2))
         def _TRANSPOSE_backward(grad):
-            # 反向传播时需要使用逆转置
-            # 创建逆转置的轴顺序
-            inverse_axes = [0] * len(axes)
-            for i, axis in enumerate(axes):
-                inverse_axes[axis] = i
-            return grad.transpose(*inverse_axes)
-        out.grad_fn = GradientFunction(_TRANSPOSE_backward,out)
+            # 反向传播时交换相同的轴
+            return np.swapaxes(grad, axis1, axis2)     
+        out.grad_fn = GradientFunction(_TRANSPOSE_backward, out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     

@@ -131,7 +131,7 @@ class Attention(Module):
         out = attn_weights @ v
         
         # 转置回原来的形状并reshape
-        out = out.transpose(0, 2, 1, 3)
+        out = out.transpose(1,2)
         out = out.reshape(out.shape[0], out.shape[1], self.d_model)
         
         return self.o(out)
