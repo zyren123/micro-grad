@@ -1,7 +1,8 @@
 import numpy as np
 class GradientFunction:
-    def __init__(self, func):
+    def __init__(self, func, tensor=None):
         self.func = func
+        self.tensor = tensor  # 保存对应的张量引用
         self.next_functions = []
     
     def add_next_function(self, next_function):
@@ -70,7 +71,7 @@ class Tensor:
             return self_grad, other_grad
 
         out=Tensor(self.data + other.data)
-        out.grad_fn = GradientFunction(_ADD_backward)
+        out.grad_fn = GradientFunction(_ADD_backward, out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         out.grad_fn.add_next_function(other.get_grad_fn())
         return out
@@ -240,10 +241,14 @@ class Tensor:
         while task_queue:
             grad_fn, current_grad = task_queue.pop()
 
-            # The case of _accumulate_grad
-            if not isinstance(grad_fn, GradientFunction):
-                grad_fn(current_grad)
-                continue
+            # The case of _accumulate_grad (叶子节点)
+            # if not isinstance(grad_fn, GradientFunction):
+            #     grad_fn(current_grad)
+            #     continue
+
+            # 为中间节点累积梯度
+            if hasattr(grad_fn, 'tensor') and grad_fn.tensor is not None and grad_fn.tensor is not self:
+                grad_fn.tensor._accumulate_grad(current_grad)
 
             grads = grad_fn(current_grad)
             if grads is None:
