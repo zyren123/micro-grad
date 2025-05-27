@@ -84,7 +84,7 @@ class Tensor:
             other_grad = self._handle_broadcast_grad(grad * self.data, other.shape)
             return self_grad, other_grad
         out=Tensor(self.data * other.data)
-        out.grad_fn = GradientFunction(_MUL_backward)
+        out.grad_fn = GradientFunction(_MUL_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         out.grad_fn.add_next_function(other.get_grad_fn())
         return out
@@ -101,7 +101,7 @@ class Tensor:
         # 确保数据为浮点型，避免整数负次幂错误
         data = self.data.astype(float)
         out=Tensor(data ** other)
-        out.grad_fn = GradientFunction(_POW_backward)
+        out.grad_fn = GradientFunction(_POW_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
 
@@ -109,7 +109,7 @@ class Tensor:
         def _MATMUL_backward(grad):
             return grad @ other.data.T, self.data.T @ grad
         out=Tensor(self.data @ other.data)
-        out.grad_fn = GradientFunction(_MATMUL_backward)
+        out.grad_fn = GradientFunction(_MATMUL_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         out.grad_fn.add_next_function(other.get_grad_fn())
         return out
@@ -143,7 +143,7 @@ class Tensor:
         def _RELU_backward(grad):
             return self._handle_broadcast_grad(grad * (self.data > 0), self.shape)
         out=Tensor(np.maximum(0, self.data))
-        out.grad_fn = GradientFunction(_RELU_backward)
+        out.grad_fn = GradientFunction(_RELU_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
@@ -151,7 +151,7 @@ class Tensor:
         def _EXP_backward(grad):
             return self._handle_broadcast_grad(grad * np.exp(self.data), self.shape)
         out=Tensor(np.exp(self.data))
-        out.grad_fn = GradientFunction(_EXP_backward)
+        out.grad_fn = GradientFunction(_EXP_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
@@ -159,7 +159,7 @@ class Tensor:
         def _SUM_backward(grad):
             return np.ones_like(self.data) * grad
         out=Tensor(np.sum(self.data))
-        out.grad_fn = GradientFunction(_SUM_backward)
+        out.grad_fn = GradientFunction(_SUM_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
@@ -167,7 +167,7 @@ class Tensor:
         def _MEAN_backward(grad):
             return np.ones_like(self.data) * grad / self.data.size
         out=Tensor(np.mean(self.data))
-        out.grad_fn = GradientFunction(_MEAN_backward)
+        out.grad_fn = GradientFunction(_MEAN_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
 
@@ -175,7 +175,7 @@ class Tensor:
         def _LOG_backward(grad):
             return self._handle_broadcast_grad(grad / self.data, self.shape)
         out=Tensor(np.log(self.data))
-        out.grad_fn = GradientFunction(_LOG_backward)
+        out.grad_fn = GradientFunction(_LOG_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
 
@@ -209,7 +209,7 @@ class Tensor:
             # 最终梯度: softmax * (grad - sum(softmax * grad))
             return self._handle_broadcast_grad(softmax_vals * (grad - sum_s_times_grad), self.shape)
         
-        out.grad_fn = GradientFunction(_SOFTMAX_backward)
+        out.grad_fn = GradientFunction(_SOFTMAX_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
