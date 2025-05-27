@@ -178,16 +178,17 @@ def compare_attention_with_pytorch():
     # 将我们的权重复制到PyTorch模型中
     with torch.no_grad():
         # 注意PyTorch的权重形状是 (d_model, d_model)，我们的是 (d_model, d_model)
-        torch_attn.in_proj_weight[:d_model] = torch.tensor(our_attn.q.w.data.T)  # Q权重
-        torch_attn.in_proj_weight[d_model:2*d_model] = torch.tensor(our_attn.k.w.data.T)  # K权重  
-        torch_attn.in_proj_weight[2*d_model:] = torch.tensor(our_attn.v.w.data.T)  # V权重
+        # 确保所有数据都是float32类型
+        torch_attn.in_proj_weight[:d_model] = torch.tensor(our_attn.q.w.data.T, dtype=torch.float32)  # Q权重
+        torch_attn.in_proj_weight[d_model:2*d_model] = torch.tensor(our_attn.k.w.data.T, dtype=torch.float32)  # K权重  
+        torch_attn.in_proj_weight[2*d_model:] = torch.tensor(our_attn.v.w.data.T, dtype=torch.float32)  # V权重
         
-        torch_attn.in_proj_bias[:d_model] = torch.tensor(our_attn.q.b.data)  # Q偏置
-        torch_attn.in_proj_bias[d_model:2*d_model] = torch.tensor(our_attn.k.b.data)  # K偏置
-        torch_attn.in_proj_bias[2*d_model:] = torch.tensor(our_attn.v.b.data)  # V偏置
+        torch_attn.in_proj_bias[:d_model] = torch.tensor(our_attn.q.b.data, dtype=torch.float32)  # Q偏置
+        torch_attn.in_proj_bias[d_model:2*d_model] = torch.tensor(our_attn.k.b.data, dtype=torch.float32)  # K偏置
+        torch_attn.in_proj_bias[2*d_model:] = torch.tensor(our_attn.v.b.data, dtype=torch.float32)  # V偏置
         
-        torch_attn.out_proj.weight.data = torch.tensor(our_attn.o.w.data.T)
-        torch_attn.out_proj.bias.data = torch.tensor(our_attn.o.b.data)
+        torch_attn.out_proj.weight.data = torch.tensor(our_attn.o.w.data.T, dtype=torch.float32)
+        torch_attn.out_proj.bias.data = torch.tensor(our_attn.o.b.data, dtype=torch.float32)
     
     # 前向传播
     print("\n前向传播比较:")
