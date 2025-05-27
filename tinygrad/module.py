@@ -93,7 +93,21 @@ class Sequential(Module):
     
     def __repr__(self):
         return f"Sequential(layers={self.layers})"
-
+class LayerNorm(Module):
+    def __init__(self, d_model):
+        super().__init__()
+        self.gamma = Tensor.ones((d_model,))
+        self.beta = Tensor.zeros((d_model,))
+        self.params = [self.gamma, self.beta]
+        
+    def forward(self, x:Tensor) -> Tensor:
+        eps = 1e-5
+        mean = x.mean(axis=-1, keepdims=True)
+        var = x.var(axis=-1, keepdims=True)
+        return self.gamma * (x - mean) / (var + eps).sqrt() + self.beta
+    
+    def __repr__(self):
+        return f"LayerNorm(d_model={self.gamma.shape[0]})"
 class Attention(Module):
     def __init__(self, d_model, n_heads):
         super().__init__()
@@ -103,6 +117,13 @@ class Attention(Module):
         self.k = Linear(d_model, d_model)
         self.v = Linear(d_model, d_model)
         self.o = Linear(d_model, d_model)
+        self.ln = LayerNorm(d_model)
+        # 将所有线性层的参数添加到模块参数列表中
+        self.params.extend(self.q.params)
+        self.params.extend(self.k.params)
+        self.params.extend(self.v.params)
+        self.params.extend(self.o.params)
+        self.params.extend(self.ln.params)
         
     def forward(self, x:Tensor, is_causal=False) -> Tensor:
         q = self.q(x)
@@ -134,7 +155,7 @@ class Attention(Module):
         out = out.transpose(1,2)
         out = out.reshape(out.shape[0], out.shape[1], self.d_model)
         
-        return self.o(out)
+        return self.ln(self.o(out))
 
 def test_attention():
     x=Tensor.randn((1,10,12))
@@ -174,7 +195,7 @@ def compare_attention_with_pytorch():
     print("测试PyTorch实现:")
     torch_x = torch.tensor(input_data.copy(), requires_grad=True, dtype=torch.float32)
     torch_attn = torch.nn.MultiheadAttention(d_model, n_heads, batch_first=True)
-    
+    torch_ln = torch.nn.LayerNorm(d_model)
     # 将我们的权重复制到PyTorch模型中
     with torch.no_grad():
         # 注意PyTorch的权重形状是 (d_model, d_model)，我们的是 (d_model, d_model)
@@ -189,6 +210,8 @@ def compare_attention_with_pytorch():
         
         torch_attn.out_proj.weight.data = torch.tensor(our_attn.o.w.data.T, dtype=torch.float32)
         torch_attn.out_proj.bias.data = torch.tensor(our_attn.o.b.data, dtype=torch.float32)
+        torch_ln.weight.data = torch.tensor(our_attn.ln.gamma.data, dtype=torch.float32)
+        torch_ln.bias.data = torch.tensor(our_attn.ln.beta.data, dtype=torch.float32)
     
     # 前向传播
     print("\n前向传播比较:")
@@ -200,6 +223,7 @@ def compare_attention_with_pytorch():
     
     # PyTorch前向传播
     torch_output, _ = torch_attn(torch_x, torch_x, torch_x)
+    torch_output = torch_ln(torch_output)
     print(f"PyTorch输出形状: {torch_output.shape}")
     print(f"PyTorch输出前5个元素: {torch_output.detach().flatten()[:5].tolist()}")
     

@@ -156,12 +156,8 @@ class Tensor:
         return self.__sub__(other)
     
     def relu(self):
-        def _RELU_backward(grad):
-            return self._handle_broadcast_grad(grad * (self.data > 0), self.shape)
-        out=Tensor(np.maximum(0, self.data))
-        out.grad_fn = GradientFunction(_RELU_backward,out)
-        out.grad_fn.add_next_function(self.get_grad_fn())
-        return out
+        """使用现有算子实现ReLU: relu(x) = (x + abs(x)) / 2"""
+        return (self + self.abs()) / 2
     
     def exp(self):
         def _EXP_backward(grad):
@@ -171,22 +167,33 @@ class Tensor:
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
-    def sum(self):
-        def _SUM_backward(grad):
-            return np.ones_like(self.data) * grad
-        out=Tensor(np.sum(self.data))
-        out.grad_fn = GradientFunction(_SUM_backward,out)
-        out.grad_fn.add_next_function(self.get_grad_fn())
-        return out
+    def sum(self, axis=None, keepdims=False):
+        """使用mean算子实现sum"""
+        if axis is None:
+            return self.mean() * self.data.size
+        else:
+            return self.mean(axis=axis, keepdims=keepdims) * self.data.shape[axis]
     
-    def mean(self):
-        def _MEAN_backward(grad):
-            return np.ones_like(self.data) * grad / self.data.size
-        out=Tensor(np.mean(self.data))
+    def mean(self,axis=None,keepdims=False):
+        def _MEAN_backward(grad):   
+            if axis is None:
+                return np.ones_like(self.data) * grad / self.data.size
+            else:
+                return np.ones_like(self.data) * grad / self.data.shape[axis]
+        out=Tensor(np.mean(self.data,axis=axis,keepdims=keepdims))
         out.grad_fn = GradientFunction(_MEAN_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
-
+    
+    def var(self, axis=None, keepdims=False):
+        """计算方差，使用现有算子实现"""
+        # var(x) = mean((x - mean(x))^2)
+        mean_val = self.mean(axis=axis, keepdims=True)
+        diff = self - mean_val
+        squared_diff = diff ** 2
+        variance = squared_diff.mean(axis=axis, keepdims=keepdims)
+        return variance
+    
     def log(self):
         def _LOG_backward(grad):
             return self._handle_broadcast_grad(grad / self.data, self.shape)
@@ -195,40 +202,40 @@ class Tensor:
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
 
-    def softmax(self, dim=-1):
-        """计算softmax
-        
-        Args:
-            dim: 计算softmax的维度，默认为最后一个维度
-            
-        Returns:
-            softmax结果的Tensor
-        """
-        # 为数值稳定性，减去最大值
-        x_max = np.max(self.data, axis=dim, keepdims=True)
-        shifted = self.data - x_max
-        exp_vals = np.exp(shifted)
-        softmax_vals = exp_vals / np.sum(exp_vals, axis=dim, keepdims=True)
-        
-        out = Tensor(softmax_vals)
-        
-        def _SOFTMAX_backward(grad):
-            # 正确处理softmax梯度
-            # 梯度公式: ∂softmax(x)_i/∂x_j = softmax(x)_i * (δ_ij - softmax(x)_j)
-            
-            # 先计算 softmax * grad
-            s_times_grad = softmax_vals * grad
-            
-            # 然后计算 sum(softmax * grad) 沿着softmax的dim维度
-            sum_s_times_grad = np.sum(s_times_grad, axis=dim, keepdims=True)
-            
-            # 最终梯度: softmax * (grad - sum(softmax * grad))
-            return self._handle_broadcast_grad(softmax_vals * (grad - sum_s_times_grad), self.shape)
-        
-        out.grad_fn = GradientFunction(_SOFTMAX_backward,out)
+    def abs(self):
+        def _ABS_backward(grad):
+            return self._handle_broadcast_grad(grad * np.sign(self.data), self.shape)
+        out=Tensor(np.abs(self.data))
+        out.grad_fn = GradientFunction(_ABS_backward,out)
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
+
+    def max(self, axis=None, keepdims=False):
+        def _MAX_backward(grad):
+            # max的梯度只在最大值位置为1，其他位置为0
+            max_vals = np.max(self.data, axis=axis, keepdims=True)
+            mask = (self.data == max_vals).astype(float)
+            if axis is not None and not keepdims:
+                # 需要扩展grad的维度以匹配mask
+                grad_expanded = np.expand_dims(grad, axis=axis)
+                return self._handle_broadcast_grad(mask * grad_expanded, self.shape)
+            else:
+                return self._handle_broadcast_grad(mask * grad, self.shape)
+        out=Tensor(np.max(self.data, axis=axis, keepdims=keepdims))
+        out.grad_fn = GradientFunction(_MAX_backward,out)
+        out.grad_fn.add_next_function(self.get_grad_fn())
+        return out
+
+    def sqrt(self):
+        return self ** 0.5
     
+    def softmax(self, dim=-1):
+        """使用现有算子实现softmax"""
+        # softmax(x) = exp(x - max(x)) / sum(exp(x - max(x)))
+        x_max = self.max(axis=dim, keepdims=True)
+        shifted = self - x_max
+        exp_shifted = shifted.exp()
+        return exp_shifted / exp_shifted.sum(axis=dim, keepdims=True)
     
     def transpose(self, axis1, axis2):
         """张量转置操作
