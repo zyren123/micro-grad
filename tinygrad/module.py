@@ -148,8 +148,111 @@ def test_attention():
     print(attn.o.w.grad)
     print(x.grad)
     
+def compare_attention_with_pytorch():
+    """比较我们的注意力机制实现和PyTorch的实现"""
+    print("=" * 60)
+    print("比较自定义注意力机制和PyTorch实现")
+    print("=" * 60)
+    
+    # 设置相同的随机种子
+    np.random.seed(42)
+    torch.manual_seed(42)
+    
+    # 参数设置
+    batch_size, seq_len, d_model, n_heads = 1, 8, 12, 4
+    head_dim = d_model // n_heads
+    
+    # 创建相同的输入数据
+    input_data = np.random.randn(batch_size, seq_len, d_model)
+    
+    # 我们的实现
+    print("测试我们的实现:")
+    our_x = Tensor(input_data.copy())
+    our_attn = Attention(d_model, n_heads)
+    
+    # PyTorch实现
+    print("测试PyTorch实现:")
+    torch_x = torch.tensor(input_data.copy(), requires_grad=True, dtype=torch.float32)
+    torch_attn = torch.nn.MultiheadAttention(d_model, n_heads, batch_first=True)
+    
+    # 将我们的权重复制到PyTorch模型中
+    with torch.no_grad():
+        # 注意PyTorch的权重形状是 (d_model, d_model)，我们的是 (d_model, d_model)
+        torch_attn.in_proj_weight[:d_model] = torch.tensor(our_attn.q.w.data.T)  # Q权重
+        torch_attn.in_proj_weight[d_model:2*d_model] = torch.tensor(our_attn.k.w.data.T)  # K权重  
+        torch_attn.in_proj_weight[2*d_model:] = torch.tensor(our_attn.v.w.data.T)  # V权重
+        
+        torch_attn.in_proj_bias[:d_model] = torch.tensor(our_attn.q.b.data)  # Q偏置
+        torch_attn.in_proj_bias[d_model:2*d_model] = torch.tensor(our_attn.k.b.data)  # K偏置
+        torch_attn.in_proj_bias[2*d_model:] = torch.tensor(our_attn.v.b.data)  # V偏置
+        
+        torch_attn.out_proj.weight.data = torch.tensor(our_attn.o.w.data.T)
+        torch_attn.out_proj.bias.data = torch.tensor(our_attn.o.b.data)
+    
+    # 前向传播
+    print("\n前向传播比较:")
+    
+    # 我们的前向传播
+    our_output = our_attn(our_x, is_causal=False)  # 先测试非因果注意力
+    print(f"我们的输出形状: {our_output.shape}")
+    print(f"我们的输出前5个元素: {our_output.data.flatten()[:5]}")
+    
+    # PyTorch前向传播
+    torch_output, _ = torch_attn(torch_x, torch_x, torch_x)
+    print(f"PyTorch输出形状: {torch_output.shape}")
+    print(f"PyTorch输出前5个元素: {torch_output.detach().flatten()[:5].tolist()}")
+    
+    # 比较输出差异
+    torch_output_np = torch_output.detach().cpu().numpy()
+    output_diff = np.abs(our_output.data - torch_output_np)
+    print(f"输出最大差异: {np.max(output_diff)}")
+    print(f"输出平均差异: {np.mean(output_diff)}")
+    
+    # 反向传播比较
+    print("\n反向传播比较:")
+    
+    # 创建相同的损失
+    our_loss = our_output.sum()
+    torch_loss = torch_output.sum()
+    
+    # 反向传播
+    our_loss.backward()
+    torch_loss.backward()
+    
+    # 比较输入梯度
+    torch_x_grad_np = torch_x.grad.detach().cpu().numpy()
+    input_grad_diff = np.abs(our_x.grad - torch_x_grad_np)
+    print(f"输入梯度最大差异: {np.max(input_grad_diff)}")
+    print(f"输入梯度平均差异: {np.mean(input_grad_diff)}")
+    
+    # 比较权重梯度
+    # Q权重梯度
+    q_grad_torch = torch_attn.in_proj_weight.grad[:d_model].T.detach().cpu().numpy()
+    q_grad_diff = np.abs(our_attn.q.w.grad - q_grad_torch)
+    print(f"Q权重梯度最大差异: {np.max(q_grad_diff)}")
+    
+    # K权重梯度  
+    k_grad_torch = torch_attn.in_proj_weight.grad[d_model:2*d_model].T.detach().cpu().numpy()
+    k_grad_diff = np.abs(our_attn.k.w.grad - k_grad_torch)
+    print(f"K权重梯度最大差异: {np.max(k_grad_diff)}")
+    
+    # V权重梯度
+    v_grad_torch = torch_attn.in_proj_weight.grad[2*d_model:].T.detach().cpu().numpy()
+    v_grad_diff = np.abs(our_attn.v.w.grad - v_grad_torch)
+    print(f"V权重梯度最大差异: {np.max(v_grad_diff)}")
+    
+    # 输出层权重梯度
+    o_grad_torch = torch_attn.out_proj.weight.grad.T.detach().cpu().numpy()
+    o_grad_diff = np.abs(our_attn.o.w.grad - o_grad_torch)
+    print(f"输出权重梯度最大差异: {np.max(o_grad_diff)}")
+    
+    print("=" * 60)
+
 if __name__ == "__main__":
     try:
+        # 首先比较我们的注意力机制和PyTorch的实现
+        compare_attention_with_pytorch()
+        
         test_attention()
         print("创建模型...")
         model = MLP(784, [1024, 10])
