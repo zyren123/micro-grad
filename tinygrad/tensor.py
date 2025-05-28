@@ -254,6 +254,15 @@ class Tensor:
         out.grad_fn.add_next_function(self.get_grad_fn())
         return out
     
+    @property
+    def T(self):
+        """矩阵转置属性，交换最后两个维度"""
+        if len(self.shape) < 2:
+            # 对于1D张量，返回自身
+            return self
+        # 对于2D及以上张量，交换最后两个维度
+        return self.transpose(-2, -1)
+    
     def reshape(self, *shape):
         out=Tensor(self.data.reshape(*shape))
         def _RESHAPE_backward(grad):
