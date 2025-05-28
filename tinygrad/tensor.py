@@ -245,15 +245,7 @@ class Tensor:
                 - 如果没有参数：反转所有轴 (等价于 .T)
                 - 如果有2个参数：交换指定的两个轴
                 - 如果有完整的轴序列：按指定顺序重排轴
-        """
-        ndim = len(self.data.shape)
-        
-        # 处理负索引
-        if axis1 < 0:
-            axis1 = ndim + axis1
-        if axis2 < 0:
-            axis2 = ndim + axis2
-                
+        """ 
         out = Tensor(np.swapaxes(self.data, axis1, axis2))
         def _TRANSPOSE_backward(grad):
             # 反向传播时交换相同的轴
